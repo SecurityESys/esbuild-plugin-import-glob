@@ -24,7 +24,7 @@ const EsbuildPluginImportGlob = () => ({
             })).sort();
             const importerCode = `
         ${files
-                .map((module, index) => `import * as module${index} from '${module}'`)
+                .map((module, index) => `import * as module${index} from './${module}'`)
                 .join(';')}
         const modules = [${files
                 .map((module, index) => `module${index}`)
