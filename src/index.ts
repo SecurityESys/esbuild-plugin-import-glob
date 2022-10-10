@@ -1,3 +1,4 @@
+import path from 'path';
 import fastGlob from 'fast-glob';
 import { Plugin } from 'esbuild';
 
@@ -10,25 +11,25 @@ const EsbuildPluginImportGlob = (): Plugin => ({
       }
 
       return {
-        // 'path' is the value that esbuild uses for optimizations, to not call 'onLoad' for the same file again.
-        // 'args.path' contains only the glob string. If the same glob string is used from different directories,
-        // then the found globbing from a previous directory is used again.
-        // To enforce that globbing is done again, when a different directory appears, the path is fed with a 
-        // concatenation of the glob string and the directory
-        path: args.resolveDir + '|' + args.path,
+        // make sure that imports are properly scoped to directories that are requested from
+        // otherwise results get overwritten
+        path: path.resolve(args.resolveDir, args.path),
         namespace: 'import-glob',
+        pluginData: {
+          path: args.path,
+          resolveDir: args.resolveDir,
+        },
       };
     });
 
     build.onLoad({ filter: /.*/, namespace: 'import-glob' }, async (args) => {
-      const [resolveDir, path] = args.path.split('|');
       const files = (
-        await fastGlob(path, {
-          cwd: resolveDir,
+        await fastGlob(args.pluginData.path, {
+          cwd: args.pluginData.resolveDir,
         })
       ).sort();
 
-      let importerCode = `
+      const importerCode = `
         ${files
           .map((module, index) => `import * as module${index} from '${module}'`)
           .join(';')}
@@ -37,11 +38,11 @@ const EsbuildPluginImportGlob = (): Plugin => ({
           .join(',')}];
         export default modules;
         export const filenames = [${files
-          .map((module, index) => `'${module}'`)
+          .map((module) => `'${module}'`)
           .join(',')}]
       `;
 
-      return { contents: importerCode, resolveDir };
+      return { contents: importerCode, resolveDir: args.pluginData.resolveDir };
     });
   },
 });
